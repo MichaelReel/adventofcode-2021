@@ -1,0 +1,1 @@
+{ Paste Day_24 Problem Here }
