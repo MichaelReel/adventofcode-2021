@@ -5,7 +5,7 @@ https://adventofcode.com/2021
 | Day | Part 1 | Part 2 | execute                  |
 |-----|--------|--------|--------------------------|
 |  1  | [x]    | [x]    | python3 Day_01/day_01.py |
-|  2  | [ ]    | [ ]    | python3 Day_02/day_02.py |
+|  2  | [x]    | [x]    | python3 Day_02/day_02.py |
 |  3  | [ ]    | [ ]    | python3 Day_03/day_03.py |
 |  4  | [ ]    | [ ]    | python3 Day_04/day_05.py |
 |  5  | [ ]    | [ ]    | python3 Day_05/day_05.py |
