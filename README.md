@@ -1,6 +1,7 @@
 # Advent of Code 2021
 https://adventofcode.com/2021
 
+Just execute from the git root folder
 
 | Day | Part 1 | Part 2 | execute                  |
 |-----|--------|--------|--------------------------|
@@ -13,8 +14,8 @@ https://adventofcode.com/2021
 |  7  | [x]    | [x]    | python3 Day_07/day_07.py |
 |  8  | [x]    | [x]    | python3 Day_08/day_08.py |
 |  9  | [x]    | [x]    | python3 Day_09/day_09.py |
-| 10  | [ ]    | [ ]    | python3 Day_10/day_10.py |
-| 11  | [ ]    | [ ]    | python3 Day_11/day_11.py |
+| 10  | [x]    | [x]    | python3 Day_10/day_10.py |
+| 11  | [x]    | [x]    | python3 Day_11/day_11.py |
 | 12  | [ ]    | [ ]    | python3 Day_12/day_12.py |
 | 13  | [ ]    | [ ]    | python3 Day_13/day_13.py |
 | 14  | [ ]    | [ ]    | python3 Day_14/day_14.py |
