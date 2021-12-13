@@ -17,7 +17,7 @@ Just execute from the git root folder
 | 10  | [x]    | [x]    | python3 Day_10/day_10.py |
 | 11  | [x]    | [x]    | python3 Day_11/day_11.py |
 | 12  | [x]    | [x]    | python3 Day_12/day_12.py |
-| 13  | [ ]    | [ ]    | python3 Day_13/day_13.py |
+| 13  | [x]    | [x]    | python3 Day_13/day_13.py |
 | 14  | [ ]    | [ ]    | python3 Day_14/day_14.py |
 | 15  | [ ]    | [ ]    | python3 Day_15/day_15.py |
 | 16  | [ ]    | [ ]    | python3 Day_16/day_16.py |
