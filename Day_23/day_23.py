@@ -4,7 +4,7 @@ from copy import deepcopy
 
 
 input_file = open("Day_23/input", "r")
-input_file = open("Day_23/sample_input", "r")
+# input_file = open("Day_23/sample_input", "r")
 lines = [x for x in input_file.readlines()]
 
 
@@ -46,63 +46,44 @@ class Move(namedtuple("Move", "start end cost")):
         return f"{self.start.room}:{self.start.pos}->{self.end.room}:{self.end.pos}|{self.cost}"
 
 
-all_positions = []
-all_positions.extend([Position(0, i) for i in range(11)])
-all_positions.extend([Position(i, 0) for i in range(1,5)])
-all_positions.extend([Position(i, 1) for i in range(1,5)])
-all_positions.extend([Position(i, 2) for i in range(1,5)])
-all_positions.extend([Position(i, 3) for i in range(1,5)])
+def create_path_lookup_table(room_depth : int) -> dict[Position, dict[Position, list[Position]]]:
+    # Create cache of paths so we're not re-creating paths a bunch of times
 
-# Cache paths so we're not recreating a bunch of times
-path_position_lookup_table = {}
+    hall_positions = [Position(0, i) for i in range(11)]
+    room_positions = []
 
-def get_path_positions(start : Position, end : Position) -> list[Position]:
-    if (start, end) in path_position_lookup_table:
-        return path_position_lookup_table[(start, end)]
+    for dep in range(room_depth):
+        room_positions.extend([Position(i, dep) for i in range(1,5)])
+    all_positions = hall_positions + room_positions
 
-    path = []
-    # Exit room further, if required
-    if start.room > 0 and start.pos > 0:
+    path_lookup_table = {}
+    for a in all_positions:
+        #skip paths that end or exit at the entrance to a room
+        if a.room == 0 and a.pos in room_to_hallway.values():
+            continue
+        path_lookup_table[a] = {}
 
-        path.append(Position(start.room, 0))
+    for a in hall_positions:
+        #skip paths that end or exit at the entrance to a room
+        if a.pos in room_to_hallway.values():
+            continue
 
-    # Get corridor range
-    corridor_start = start.pos
-    if start.room > 0:
-        corridor_start = room_to_hallway[start.room]
-    
-    corridor_end = end.pos
-    if end.room > 0:
-        corridor_end = room_to_hallway[end.room]
-    
-    diff = 1 if corridor_end > corridor_start else -1
-    if start.room == 0:
-        corridor_start += diff
-    if end.room != 0:
-        corridor_end += diff
-    
-    # Get corridor path
-    corridor = corridor_start
-    while corridor != corridor_end:
-        path.append(Position(0, corridor))
-        corridor += diff
+        for b in room_positions:
+            path = []
 
-    # Enter room further, if required
-    if end.room > 0 and end.pos > 0:
-        path.append(Position(end.room, 0))
+            # Exit or Enter room further, if required
+            for pos in range(b.pos):
+                path.append(Position(b.room, pos))
 
-    path_position_lookup_table[(start, end)] = path
+            corridor_start = min(a.pos + 1, room_to_hallway[b.room])
+            corridor_end = max(a.pos - 1, room_to_hallway[b.room])
+            for corridor in range(corridor_start, corridor_end + 1):
+                path.append(Position(0, corridor))
 
-    return path
-
-
-success = [
-    [None] * 11,
-    ['A'] * 2,
-    ['B'] * 2,
-    ['C'] * 2,
-    ['D'] * 2,
-]
+            path_lookup_table[a][b] = path
+            path_lookup_table[b][a] = path
+        
+    return path_lookup_table
 
 
 class Burrow:
@@ -122,48 +103,45 @@ class Burrow:
         return "."
     
     def get_valid_moves(self) -> list[Move]:
+        room_depth = len(self.rooms[1])
         moves = []
-        for start in all_positions:
+        for start in path_lookup_table:
+
             # No point moving an empty spot
             amphipod = self.rooms[start.room][start.pos]
             if not amphipod:
                 continue
-            # Don't move if we're already in the back of the correct room
-            if start.pos == 1 and start.room == amphipod_preferred_room[amphipod]:
-                continue
-            # Don't move if we're in the front of the correct room, with the correct other occupant
-            other_occupant = self.rooms[start.room][1]
-            if other_occupant and start.pos == 0 and start.room == amphipod_preferred_room[amphipod] and start.room == amphipod_preferred_room[other_occupant]:
-                continue
-            for end in all_positions:
+
+            # Don't move if we're at the front of a 'correct' room
+            if start.room == amphipod_preferred_room[amphipod]:
+                if room_depth - start.pos == self.rooms[start.room][start.pos:].count(amphipod):
+                    continue
+            
+            # Maybe don't move if we're not the first non-empty cell in the room
+            if start.room > 0:
+                if start.pos != self.rooms[start.room][:start.pos].count(None):
+                    continue
+
+            for end in path_lookup_table[start]:
                 # Can't move to occupied spot
                 if self.rooms[end.room][end.pos]:
                     continue
                 # Moving to room
                 if end.room != 0:
-                    # Move should be from hallway to room, or room to hallway
-                    if start.room != 0:
-                        continue
                     # Won't move to the wrong room
                     if end.room != amphipod_preferred_room[amphipod]:
                         continue
+
                     # Won't move to a room if the room is occupied with the wrong type
-                    back_of_room = self.rooms[end.room][1]
-                    if back_of_room and amphipod_preferred_room[back_of_room] != end.room:
+                    if room_depth - end.pos - 1 != self.rooms[end.room][end.pos + 1:].count(amphipod):
                         continue
-                    # Don't move to the front of an empty room
-                    if end.pos == 0 and not back_of_room:
-                        continue
-                # Moving to corridor
-                else:
-                    # Move should be from hallway to room, or room to hallway
-                    if start.room == 0:
-                        continue 
-                    # Won't stop in hallway, outside a room
-                    if end.pos in room_to_hallway.values():
-                        continue
+
+                # Moving to corridor, don't stop in hallway outside a room
+                elif end.pos in room_to_hallway.values():
+                    continue
+
                 # If the path is blocked, we can't move either
-                path = get_path_positions(start, end)
+                path = path_lookup_table[start][end]
                 blocked = False
                 for step in path:
                     if self.rooms[step.room][step.pos]:
@@ -184,7 +162,7 @@ class Burrow:
         new_rooms[move.start.room][move.start.pos] = None
         return Burrow(new_rooms, self.cost + move.cost)
     
-    def is_complete(self) -> bool:
+    def is_complete(self, success : list[list[str]]) -> bool:
         return self.rooms == success
     
     def __repr__(self) -> str:
@@ -197,8 +175,10 @@ class Burrow:
         return repr_str
 
 
-# Part 1
-print("Part 1:")
+
+
+# # Part 1
+# print("Part 1:")
 
 rooms = [
     [None] * 11,
@@ -207,6 +187,17 @@ rooms = [
     [lines[2][7], lines[3][7]],
     [lines[2][9], lines[3][9]],
 ]
+
+success = [
+    [None] * 11,
+    ['A'] * 2,
+    ['B'] * 2,
+    ['C'] * 2,
+    ['D'] * 2,
+]
+
+path_lookup_table = create_path_lookup_table(2)
+
 
 class StackItem:
     burrow : Burrow
@@ -226,63 +217,99 @@ class StackItem:
         return StackItem(new_burrow, path_limit, self.move_record + [move])
 
 
-best_cost = 9223372036854775807
-stack = [StackItem(Burrow(rooms), best_cost)]
-tests = 0
-found = 0
+# best_cost = 9223372036854775807
+# stack = [StackItem(Burrow(rooms), best_cost)]
+# tests = 0
+# found = 0
 
-# This is super slow and inefficient - does get there eventually, but it's not good
+# # This is super slow and inefficient - does get there eventually, but it's not good
 
-while stack:
-    stack_item = stack[-1]
-    tests += 1
-    # Debug
-    # print(f"{stack_item.move_record}")
-    if tests % 1000000 == 0:
-        print(f"Still working (Best cost: {best_cost}, stack: {len(stack)}, moves: {stack_item.move_record}, tests: {tests})")
-    # If we've got a path in budget, mark it
-    if stack_item.burrow.is_complete():
-        found += 1
-        best_cost = min(best_cost, stack_item.burrow.cost)
-        print(f"New best cost: {best_cost}, stack: {len(stack)}, moves: {stack_item.move_record}, tests: {tests}")
-    # If there are no moves left, drop from list
-    elif not stack_item.move_list:
-        stack.pop()
-    # We potentially have better solutions this way
-    else:
-        new_stack_item = stack_item.get_next_move(best_cost)
-        # Don't add if already more expensive than best cost
-        if new_stack_item.burrow.cost <= best_cost:
-            stack.append(new_stack_item)
-        else:
-            # That was the best cost for this stack so just drop the current one
-            stack.pop()
+# while stack:
+#     stack_item = stack[-1]
+#     tests += 1
+#     # Debug
+#     # print(f"{stack_item.move_record}")
+#     if tests % 1000000 == 0:
+#         print(f"Still working (Best cost: {best_cost}, stack: {len(stack)}, moves: {stack_item.move_record}, tests: {tests})")
+#     # If we've got a path in budget, mark it
+#     if stack_item.burrow.is_complete():
+#         found += 1
+#         best_cost = min(best_cost, stack_item.burrow.cost)
+#         print(f"New best cost: {best_cost}, stack: {len(stack)}, moves: {stack_item.move_record}, tests: {tests}")
+#     # If there are no moves left, drop from list
+#     elif not stack_item.move_list:
+#         stack.pop()
+#     # We potentially have better solutions this way
+#     else:
+#         new_stack_item = stack_item.get_next_move(best_cost)
+#         # Don't add if already more expensive than best cost
+#         if new_stack_item.burrow.cost <= best_cost:
+#             stack.append(new_stack_item)
+#         else:
+#             # That was the best cost for this stack so just drop the current one
+#             stack.pop()
 
-    # Move backwards in the stack until the cost is better than the current best
-    while stack and stack[-1].burrow.cost >= best_cost:
-        stack.pop()
+#     # Move backwards in the stack until the cost is better than the current best
+#     while stack and stack[-1].burrow.cost >= best_cost:
+#         stack.pop()
 
-print(f"Best cost: {best_cost}, stack: {len(stack)}, moves: {stack_item.move_record}, tests: {tests}")
+# print(f"Best cost: {best_cost}, stack: {len(stack)}, moves: {stack_item.move_record}, tests: {tests}")
 
-print(f"Result: {best_cost}")
+# print(f"Result: {best_cost}")
 
 # Part 2
 print("Part 2:")
 
-# rooms = [
-#     [None] * 11,
-#     [lines[2][3], 'D', 'D', lines[3][3]],
-#     [lines[2][5], 'C', 'B', lines[3][5]],
-#     [lines[2][7], 'B', 'A', lines[3][7]],
-#     [lines[2][9], 'A', 'C', lines[3][9]],
-# ]
+success = [
+    [None] * 11,
+    ['A'] * 4,
+    ['B'] * 4,
+    ['C'] * 4,
+    ['D'] * 4,
+]
 
-# burrow = Burrow(rooms)
-# print(f"{burrow}")
+rooms = [
+    [None] * 11,
+    [lines[2][3], 'D', 'D', lines[3][3]],
+    [lines[2][5], 'C', 'B', lines[3][5]],
+    [lines[2][7], 'B', 'A', lines[3][7]],
+    [lines[2][9], 'A', 'C', lines[3][9]],
+]
+
+path_lookup_table = create_path_lookup_table(4)
+
+# This does work (it's more or less the same as the stack approach above)
+# But the run-time is horrific - Better approach is athogether needed
+
+def find_successful_moves(burrow : Burrow, best_cost : int, move_record : list = []) -> int:
+    # Get moves in order of cheapest first
+    moves = sorted(burrow.get_valid_moves(), key=lambda x: x[2])
+    if not moves:
+        if burrow.is_complete(success):
+            best_cost = min(best_cost, burrow.cost)
+            print(f"New best cost: {best_cost} {move_record}")
+        else:
+            # print(f"No valid moves to do: {move_record}")
+            # print(f"{burrow}")
+            pass
+    for move in moves:
+        if move.cost + burrow.cost < best_cost:
+            new_burrow = burrow.apply_move(move)
+            if burrow.is_complete(success):
+                best_cost = min(best_cost, new_burrow.cost)
+                print(f"New best cost: {best_cost} {move_record} + {move}")
+                break
+            else:
+                # print("Step in")
+                best_cost = find_successful_moves(new_burrow, best_cost, move_record + [move])
+        else:
+            # If this move is too costly, don't bother at the rest
+            # print("Moves are too costly, roll back")
+            break
+    return best_cost
+
+start_burrow = Burrow(rooms)
+best_cost = find_successful_moves(start_burrow, 9223372036854775807)
 
 
-
-
-
-part_02 = "not implemented yet"
-print(f"Result: {part_02}")
+print(f"Result: {best_cost}")
