@@ -28,5 +28,5 @@ Just execute from the git root folder
 | 21  | [x]    | [x]    | python3 Day_21/day_21.py |
 | 22  | [x]    | [x]    | python3 Day_22/day_22.py |
 | 23  | [x]    | [x]    | python3 Day_23/day_23.py |
-| 24  | [ ]    | [ ]    | python3 Day_24/day_24.py |
-| 25  | [ ]    | [ ]    | python3 Day_25/day_25.py |
+| 24  | [x]    | [x]    | python3 Day_24/day_24.py |
+| 25  | [x]    | [x]    | python3 Day_25/day_25.py |

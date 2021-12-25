@@ -1,162 +1,190 @@
 #!/usr/bin/env python3
 from collections import namedtuple
+from typing import Optional, Union
 
 
 input_file = open("Day_24/input", "r")
 lines = [x.strip() for x in input_file.readlines()]
 
-Instruction = namedtuple("Instruction", "operator variable value")
+
+class Instruction(namedtuple("Instruction", "operator variable value")):
+    def __repr__(self) -> str:
+        return f"{self.operator} {self.variable} {self.value}"
 
 
+# Grab input blocks
+instructions = []
+for line in lines:
+    tokens = line.split(' ')
+    value = (tokens[2:3] or (None,))[0]
+    if value not in [None, "w", "x", "y", "z"]:
+        value = int(value)
+    instructions.append(Instruction(tokens[0],tokens[1],value))
+
+inst_blocks = []
+while instructions:
+    instruction = instructions.pop(0)
+    if instruction.operator == "inp":
+        inst_blocks.append([])
+    else:
+        inst_blocks[-1].append(instruction)
+
+for block in inst_blocks:
+    print(f"{block}")
+
+
+# Define the APU we'll use to process each block of instructions
 class ALU:
-    # mem : dict[str, int]
-    # program : list[Instruction]
-    input_cache : dict[str, dict[str, int]] = {
-        "" : {
-            'w' : 0,
-            'x' : 0,
-            'y' : 0,
-            'z' : 0,
-            'p' : 0,
-        }
-    }
-
     def __init__(self, program : list[Instruction]) -> None:
-        self.mem = {
-            'w' : 0,
-            'x' : 0,
-            'y' : 0,
-            'z' : 0,
-            'p' : 0,
-        }
         self.program = program
+        self.mem = { 'w' : 0, 'x' : 0, 'y' : 0, 'z' : 0 }
     
-    def run_program(self, input_buffer : list[int]) -> dict[str, int]:
-        # Determine from the cache what point we can jump to in the instructions
-        buffer_history = self._get_state_from_cache(input_buffer)
-
-        # print(f"Running program against input {input_buffer}")
-        for ins in self.program[self.mem['p']:]:
-            # print(f"Preforming instruction {ins}")
-            if ins.operator == "inp":
-                self._inp(ins.variable, input_buffer, buffer_history)
-            elif ins.operator == "add":
-                self._add(ins.variable, ins.value)
+    def build_program_expression(self, w: int, x: int = 0, y: int = 0, z: int = 0) -> dict[str, int]:
+        self.mem = { 'w' : w, 'x' : x, 'y' : y, 'z' : z }
+        for ins in self.program:
+            if ins.operator == "add":
+                self.mem[ins.variable] = self._add(ins)
             elif ins.operator == "mul":
-                self._mul(ins.variable, ins.value)
+                self.mem[ins.variable] = self._mul(ins)
             elif ins.operator == "div":
-                self._div(ins.variable, ins.value)
+                self.mem[ins.variable] = self._div(ins)
             elif ins.operator == "mod":
-                self._mod(ins.variable, ins.value)
+                self.mem[ins.variable] = self._mod(ins)
             elif ins.operator == "eql":
-                self._eql(ins.variable, ins.value)
-            self.mem['p'] += 1
+                self.mem[ins.variable] = self._eql(ins)
+        return self.mem["w"], self.mem["x"], self.mem["y"], self.mem["z"]
 
-        return self.mem
+    def _add(self, ins: Instruction) -> Union[Instruction, int]:
+        a = self._get_a(ins)
+        b = self._get_b(ins)
+        if isinstance(a, int) and isinstance(b, int):
+            return a + b
+        elif b == 0:
+            return a
+        elif a == 0:
+            return b
+        return ins
+
+    def _mul(self, ins: Instruction) -> Union[Instruction, int]:
+        a = self._get_a(ins)
+        b = self._get_b(ins)
+        if isinstance(a, int) and isinstance(b, int):
+            return a * b
+        elif a == 0 or b == 0:
+            return 0
+        elif a == 1:
+            return b
+        elif b == 1:
+            return a
+        return ins
+
+    def _div(self, ins: Instruction) -> Union[Instruction, int]:
+        a = self._get_a(ins)
+        b = self._get_b(ins)
+        if isinstance(a, int) and isinstance(b, int):
+            return a // b
+        elif a == 0:
+            return 0
+        elif b == 1:
+            return a
+        return ins
+
+    def _mod(self, ins: Instruction) -> Union[Instruction, int]:
+        a = self._get_a(ins)
+        b = self._get_b(ins)
+        if isinstance(a, int) and isinstance(b, int):
+            return a % b
+        elif a == 0:
+            return 0
+        elif b == 1:
+            return 0
+        return ins
+
+    def _eql(self, ins: Instruction) -> Union[Instruction, int]:
+        a = self._get_a(ins)
+        b = self._get_b(ins)
+        if isinstance(a, int) and isinstance(b, int):
+            return 1 if a == b else 0
+        elif b == 0 and isinstance(a, Instruction) and a.operator == "eql":
+            return Instruction("neq", a.variable, a.value)
+        elif b == 1 and isinstance(a, Instruction) and a.operator == "eql":
+            return a
+        return ins
+
+    def _get_a(self, ins : Instruction) -> Union[Instruction, int]:
+        return self.mem[ins.variable]
     
-    def _get_state_from_cache(self, buffer : list[int]) -> None:
-        buffer_history = []
-
-        # Find our best key:
-        key = "".join(str(x) for x in buffer_history)
-        while key in ALU.input_cache.keys():
-            buffer_history.append(buffer.pop(0))
-            key = "".join(str(x) for x in buffer_history)
-        # Roll back to the to found state
-        buffer.insert(0, buffer_history.pop())
-        key = "".join(str(x) for x in buffer_history)
-        self.mem = ALU.input_cache[key]
-
-        return buffer_history
-    
-    def _inp(self, store, buffer, buffer_history) -> None:
-        # Before reading the next value
-        # cache the current process so we can get back to here more quickly
-        key = "".join(str(x) for x in buffer_history)
-        ALU.input_cache[key] = self.mem
-
-        # Read the next value
-        value = buffer.pop(0)
-        self.mem[store] = value
-        buffer_history.append(value)
-
-    def _add(self, store, value_str) -> None:
-        value = self._get_value(value_str)
-        self.mem[store] += value
-    
-    def _mul(self, store, value_str) -> None:
-        value = self._get_value(value_str)
-        self.mem[store] *= value
-
-    def _div(self, store, value_str) -> None:
-        value = self._get_value(value_str)
-        self.mem[store] //= value
-
-    def _mod(self, store, value_str) -> None:
-        value = self._get_value(value_str)
-        self.mem[store] %= value
-
-    def _eql(self, store, value_str) -> None:
-        value = self._get_value(value_str)
-        self.mem[store] = 1 if self.mem[store] == value else 0
-    
-    def _get_value(self, value_str) -> None:
-        if value_str in self.mem:
-            return self.mem[value_str]
-        return int(value_str)
+    def _get_b(self, ins : Instruction) -> Union[Instruction, int]:
+        return ins.value if not ins.value in self.mem else self.mem[ins.value]
 
 
-
+def find_negative_add_to_x_instruction(block : list[Instruction]) -> Optional[int]:
+    # This finds the values to make the inner condition false
+    # This is used to prevent the z expression from growing
+    # Cheers Reddit!
+    for ins in block:
+        if ins.operator == "add" and ins.variable == "x" and isinstance(ins.value, int):
+            return ins.value if ins.value < 0 else None
+    return None
 
 
 # Part 1
 print("Part 1:")
 
-instructions = []
-for line in lines:
-    tokens = line.split(' ')
-    value = (tokens[2:3] or (None,))[0]
-    instructions.append(Instruction(tokens[0],tokens[1],value))
-
-# The brute force approach is just far too slow. We might want to work backwars through the instructions to find the correct
-
-# alu = ALU(instructions)
-# input_buffer = [9] * 14
-
-# def decrement_buffer(input_buffer : list[int]):
-#     digit = 13
-#     while True:
-#         input_buffer[digit] -= 1
-#         if input_buffer[digit] == 0:
-#             input_buffer[digit] = 9
-#             digit -= 1
-#         else:
-#             break
-
-#     return input_buffer
-
-# tests = 0
-# while True:
-
-#     results = alu.run_program(input_buffer.copy())
-
-#     # print(f"{ALU.input_cache}")
-#     tests += 1
-#     if tests % 10000 == 0:
-#         print(f"{tests} tests: {''.join(str(x) for x in input_buffer)}")
-
-#     if results['z'] == 0:
-#         print(f"Model number found: {''.join(input_buffer)}")
-#         break
-    
-#     input_buffer = decrement_buffer(input_buffer)
+# Setup starting inputs - Input is only ever put into the w space
+# We've dropped the inp instructions so we'll just load the input straight into w
+results = {}
+alu = ALU(inst_blocks[0])
+for w in range(9, 0 ,-1):
+    _, x, y, z = alu.build_program_expression(w, 0, 0, 0)
+    results[z] = [w]  # Z should be 9 to 17
+print(f"Step 0 w={w} z={min(results)}..{max(results)} {len(results)}")
 
 
-part_01 = "not implemented yet"
+for i, block in enumerate(inst_blocks[1:], start=1):
+    prev_results = results
+    results = {}
+    neg_to_x = find_negative_add_to_x_instruction(block)
+    alu = ALU(block)
+    for w in range(9, 0 ,-1):
+        for z in prev_results:
+            if neg_to_x and ((z % 26) + neg_to_x != w):
+                # Optimisation touted on reddit - can't take credit for this one!
+                continue
+            _, x, y, new_z = alu.build_program_expression(w, 0, 0, z)
+            if new_z not in results:
+                results[new_z] = prev_results[z] + [w]
+    print(f"Step 0 w={w} z={min(results)}..{max(results)} {len(results)}")
+
+# The results should have a 0 for z
+part_01 = "".join(str(x) for x in results[0])
 print(f"Result: {part_01}")
+
 
 # Part 2
 print("Part 2:")
 
-part_02 = "not implemented yet"
+alu = ALU(inst_blocks[0])
+for w in range(1, 10):
+    _, x, y, z = alu.build_program_expression(w, 0, 0, 0)
+    results[z] = [w]  # Z should be 9 to 17
+print(f"Step 0 w={w} z={min(results)}..{max(results)} {len(results)}")
+
+
+for i, block in enumerate(inst_blocks[1:], start=1):
+    prev_results = results
+    results = {}
+    neg_to_x = find_negative_add_to_x_instruction(block)
+    alu = ALU(block)
+    for w in range(1, 10):
+        for z in prev_results:
+            if neg_to_x and ((z % 26) + neg_to_x != w):
+                # Optimisation touted on reddit - can't take credit for this one!
+                continue
+            _, x, y, new_z = alu.build_program_expression(w, 0, 0, z)
+            if new_z not in results:
+                results[new_z] = prev_results[z] + [w]
+    print(f"Step 0 w={w} z={min(results)}..{max(results)} {len(results)}")
+
+part_02 = "".join(str(x) for x in results[0])
 print(f"Result: {part_02}")
